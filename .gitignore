@@ -15,3 +15,7 @@ _test_flip.js
 # 旧备份（不应进仓库）
 index.html.bak
 static/index.html.bak
+
+# 根目录陈旧副本（真正用的是 app/ 包内的同名文件）
+/init_db.py
+/ai_provider.py
