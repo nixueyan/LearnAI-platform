@@ -12,19 +12,22 @@ from sqlalchemy.orm import Session
 
 from . import crud, models, schemas
 from .ai_provider import AIProviderError, generate_answer, generate_answer_stream, generate_resource_content
+from .auth import create_token, get_current_user_id
+from .config import DEFAULT_AI_PROVIDER, DEEPSEEK_API_KEY, XUNFEI_API_KEY
 from .database import engine, get_db
 
 _ENCODE_DT = ENCODERS_BY_TYPE[_datetime]
 ENCODERS_BY_TYPE[_datetime] = lambda dt: _ENCODE_DT(dt) + ('Z' if dt.tzinfo is None else '')
-
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LearnAI")
 
 app.add_middleware(
     CORSMiddleware,
+    # 前端由同一 FastAPI 同源托管，无需跨域凭据；
+    # 规范上 allow_origins=["*"] 不能配合 allow_credentials=True，故关闭凭据。
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -52,38 +55,44 @@ class NoCacheMiddleware:
 app.add_middleware(NoCacheMiddleware)
 
 
-@app.post("/api/users/register", response_model=schemas.UserOut)
+@app.post("/api/users/register", response_model=schemas.AuthResponse)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = crud.get_user_by_username(db, user.username)
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
     new_user = crud.create_user(db, user)
-    return new_user
+    return {"id": new_user.id, "username": new_user.username, "token": create_token(new_user.id)}
 
 
-@app.post("/api/users/login", response_model=schemas.UserOut)
+@app.post("/api/users/login", response_model=schemas.AuthResponse)
 def login_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_username(db, user.username)
     if not db_user or not crud.verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=400, detail="用户名或密码错误")
-    return db_user
+    # 兼容升级：历史裸 SHA256 账户首次登录后改为加盐哈希
+    if not db_user.hashed_password.startswith("salt$"):
+        db_user.hashed_password = crud.get_password_hash(user.password)
+        db.commit()
+    return {"id": db_user.id, "username": db_user.username, "token": create_token(db_user.id)}
 
 
 @app.get("/api/profiles/{user_id}", response_model=schemas.ProfileOut)
-def get_profile(user_id: int, db: Session = Depends(get_db)):
+def get_profile(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准，关闭 IDOR
     profile = db.query(models.Profile).filter(models.Profile.user_id == user_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile
 
 @app.post("/api/profiles/{user_id}", response_model=schemas.ProfileOut)
-def update_profile(user_id: int, profile: schemas.ProfileBase, db: Session = Depends(get_db)):
+def update_profile(user_id: int, profile: schemas.ProfileBase, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准，关闭 IDOR
     db_profile = crud.create_profile(db, user_id, profile)
     return db_profile
 
 
 @app.post("/api/subjects", response_model=schemas.SubjectOut)
-def create_subject(payload: schemas.SubjectCreate, db: Session = Depends(get_db)):
+def create_subject(payload: schemas.SubjectCreate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     existing = db.query(models.Subject).filter(models.Subject.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="该学科已存在")
@@ -115,7 +124,7 @@ def subject_detail(subject_id: int, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/subjects/{subject_id}")
-def delete_subject(subject_id: int, db: Session = Depends(get_db)):
+def delete_subject(subject_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     ok = crud.delete_subject(db, subject_id)
     if not ok:
         raise HTTPException(status_code=404, detail="学科未找到")
@@ -133,15 +142,23 @@ def chapter_resources(chapter_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/chapters/{chapter_id}/resources/generate", response_model=list[schemas.ResourceOut])
-def generate_resource(chapter_id: int, payload: schemas.ResourceGenerateRequest, db: Session = Depends(get_db)):
+def generate_resource(chapter_id: int, payload: schemas.ResourceGenerateRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chapter = crud.get_chapter(db, chapter_id)
     if not chapter:
         raise HTTPException(status_code=404, detail="章节未找到")
 
+    provider = payload.provider or DEFAULT_AI_PROVIDER
+    if provider == "deepseek" and not DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=400, detail="未配置 DeepSeek API Key（请在 .env 设置 DEEPSEEK_API_KEY）")
+    if provider == "xunfei" and not XUNFEI_API_KEY:
+        raise HTTPException(status_code=400, detail="未配置 讯飞 API Key（请在 .env 设置 XUNFEI_API_KEY）")
+
     results = []
     for rtype in payload.resource_types:
         try:
-            content = generate_resource_content("deepseek", chapter.title, chapter.summary or "", rtype)
+            content = generate_resource_content(provider, chapter.title, chapter.summary or "", rtype)
+        except AIProviderError as exc:
+            raise HTTPException(status_code=400, detail=f"{rtype} 生成失败：{exc}")
         except Exception:
             content = f"（{rtype}生成失败，请稍后重试）"
 
@@ -160,14 +177,15 @@ def generate_resource(chapter_id: int, payload: schemas.ResourceGenerateRequest,
 
 
 @app.post("/api/ai/chat", response_model=schemas.AIChatResponse)
-def ai_chat(payload: schemas.AIChatRequest, db: Session = Depends(get_db)):
+def ai_chat(payload: schemas.AIChatRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     chapter = None
     if payload.chapter_id is not None:
         chapter = crud.get_chapter(db, payload.chapter_id)
         if not chapter:
             raise HTTPException(status_code=404, detail="章节未找到")
 
-    if not crud.get_user(db, payload.user_id):
+    if not crud.get_user(db, user_id):
         raise HTTPException(status_code=404, detail="用户未找到")
 
     role_prompts = {
@@ -187,24 +205,25 @@ def ai_chat(payload: schemas.AIChatRequest, db: Session = Depends(get_db)):
         answer = generate_answer(payload.provider, full_prompt, {
             "subject_id": payload.subject_id,
             "chapter_id": payload.chapter_id,
-            "user_id": payload.user_id,
+            "user_id": user_id,
         })
     except AIProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    crud.save_conversation(db, payload.user_id, payload.subject_id, payload.chapter_id, payload.prompt, answer)
+    crud.save_conversation(db, user_id, payload.subject_id, payload.chapter_id, payload.prompt, answer)
     return {"answer": answer}
 
 
 @app.post("/api/ai/chat/stream")
-def ai_chat_stream(payload: schemas.AIChatRequest, db: Session = Depends(get_db)):
+def ai_chat_stream(payload: schemas.AIChatRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     chapter = None
     if payload.chapter_id is not None:
         chapter = crud.get_chapter(db, payload.chapter_id)
         if not chapter:
             raise HTTPException(status_code=404, detail="章节未找到")
 
-    if not crud.get_user(db, payload.user_id):
+    if not crud.get_user(db, user_id):
         raise HTTPException(status_code=404, detail="用户未找到")
 
     role_prompts = {
@@ -223,26 +242,31 @@ def ai_chat_stream(payload: schemas.AIChatRequest, db: Session = Depends(get_db)
     user_context = {
         "subject_id": payload.subject_id,
         "chapter_id": payload.chapter_id,
-        "user_id": payload.user_id,
+        "user_id": user_id,
     }
 
     def sse_generator():
         full_answer = ""
+        had_error = False
         try:
             for token in generate_answer_stream(payload.provider, full_prompt, user_context):
                 full_answer += token
                 yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
         except Exception:
+            had_error = True
             yield f"data: {json.dumps({'token': '[生成失败，请稍后重试]'}, ensure_ascii=False)}\n\n"
+        if not full_answer and not had_error:
+            yield f"data: {json.dumps({'token': '（AI 未返回内容，请检查 .env 中的 DEEPSEEK_API_KEY / 讯飞密钥是否正确配置）'}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         if full_answer:
-            crud.save_conversation(db, payload.user_id, payload.subject_id, payload.chapter_id, payload.prompt, full_answer)
+            crud.save_conversation(db, user_id, payload.subject_id, payload.chapter_id, payload.prompt, full_answer)
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
 
 @app.get("/api/ai/history/{user_id}")
-def ai_history(user_id: int, chapter_id: int | None = None, db: Session = Depends(get_db)):
+def ai_history(user_id: int, chapter_id: int | None = None, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     conversations = db.query(models.Conversation).filter(
         models.Conversation.user_id == user_id
     )
@@ -263,7 +287,7 @@ def ai_history(user_id: int, chapter_id: int | None = None, db: Session = Depend
 
 
 @app.post("/api/quiz/generate")
-def generate_quiz(payload: schemas.QuizRequest, db: Session = Depends(get_db)):
+def generate_quiz(payload: schemas.QuizRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chapter = crud.get_chapter(db, payload.chapter_id) if payload.chapter_id else None
     if payload.chapter_id and not chapter:
         raise HTTPException(status_code=404, detail="章节未找到")
@@ -298,7 +322,8 @@ def generate_quiz(payload: schemas.QuizRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/api/quiz/submit")
-def submit_quiz(user_id: int, payload: schemas.QuizSubmit, db: Session = Depends(get_db)):
+def submit_quiz(payload: schemas.QuizSubmit, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准，关闭 IDOR
     chapter = crud.get_chapter(db, payload.chapter_id) if payload.chapter_id else None
     if payload.chapter_id and not chapter:
         raise HTTPException(status_code=404, detail="章节未找到")
@@ -307,6 +332,8 @@ def submit_quiz(user_id: int, payload: schemas.QuizSubmit, db: Session = Depends
         raise HTTPException(status_code=400, detail="答案数量与题目数量不匹配")
 
     total = len(payload.question_ids)
+    if total == 0:
+        raise HTTPException(status_code=400, detail="没有可提交的题目")
     wrong_items = []
     all_items = []
     score = 0
@@ -357,18 +384,21 @@ def submit_quiz(user_id: int, payload: schemas.QuizSubmit, db: Session = Depends
 
 
 @app.get("/api/quiz/history/{user_id}")
-def quiz_history(user_id: int, db: Session = Depends(get_db)):
+def quiz_history(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     records = crud.get_quiz_history(db, user_id)
     return [schemas.QuizRecordOut.model_validate(r).model_dump(mode='json') for r in records]
 
 
 @app.get("/api/notes/{user_id}", response_model=list[schemas.NoteOut])
-def list_notes(user_id: int, chapter_id: int | None = None, trash: bool = False, db: Session = Depends(get_db)):
+def list_notes(user_id: int, chapter_id: int | None = None, trash: bool = False, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准，关闭 IDOR
     return crud.get_notes(db, user_id, chapter_id, include_deleted=trash)
 
 
 @app.post("/api/notes/{user_id}/restore/{note_id}")
-def restore_note(user_id: int, note_id: int, db: Session = Depends(get_db)):
+def restore_note(user_id: int, note_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     ok = crud.restore_note(db, note_id, user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="笔记未找到")
@@ -376,7 +406,8 @@ def restore_note(user_id: int, note_id: int, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/notes/{user_id}/permanent/{note_id}")
-def permanent_delete_note(user_id: int, note_id: int, db: Session = Depends(get_db)):
+def permanent_delete_note(user_id: int, note_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     ok = crud.permanent_delete_note(db, note_id, user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="笔记未找到")
@@ -384,18 +415,21 @@ def permanent_delete_note(user_id: int, note_id: int, db: Session = Depends(get_
 
 
 @app.post("/api/notes/{user_id}/empty-trash")
-def empty_trash(user_id: int, db: Session = Depends(get_db)):
+def empty_trash(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     count = crud.empty_trash(db, user_id)
     return {"detail": f"已清空 {count} 条笔记"}
 
 
 @app.post("/api/notes/{user_id}", response_model=schemas.NoteOut)
-def create_note(user_id: int, note: schemas.NoteCreate, db: Session = Depends(get_db)):
+def create_note(user_id: int, note: schemas.NoteCreate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     return crud.create_note(db, user_id, note)
 
 
 @app.put("/api/notes/{user_id}/{note_id}", response_model=schemas.NoteOut)
-def update_note(user_id: int, note_id: int, note: schemas.NoteCreate, db: Session = Depends(get_db)):
+def update_note(user_id: int, note_id: int, note: schemas.NoteCreate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     updated = crud.update_note(db, note_id, note)
     if not updated:
         raise HTTPException(status_code=404, detail="笔记未找到")
@@ -403,7 +437,8 @@ def update_note(user_id: int, note_id: int, note: schemas.NoteCreate, db: Sessio
 
 
 @app.delete("/api/notes/{user_id}/{note_id}")
-def delete_note(user_id: int, note_id: int, db: Session = Depends(get_db)):
+def delete_note(user_id: int, note_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     deleted = crud.delete_note(db, note_id, user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="笔记未找到")
@@ -411,12 +446,14 @@ def delete_note(user_id: int, note_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/progress/{user_id}", response_model=list[schemas.ProgressOut])
-def list_progress(user_id: int, db: Session = Depends(get_db)):
+def list_progress(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     return crud.get_progress(db, user_id)
 
 
 @app.post("/api/progress/{user_id}", response_model=schemas.ProgressOut)
-def set_progress(user_id: int, payload: schemas.ProgressUpdate, db: Session = Depends(get_db)):
+def set_progress(user_id: int, payload: schemas.ProgressUpdate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     return crud.update_progress(db, user_id, payload.chapter_id, payload.status)
 
 
@@ -426,7 +463,7 @@ def list_subsections(chapter_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/chapters/{chapter_id}/subsections", response_model=schemas.SubsectionOut)
-def create_subsection(chapter_id: int, payload: schemas.SubsectionCreate, db: Session = Depends(get_db)):
+def create_subsection(chapter_id: int, payload: schemas.SubsectionCreate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chapter = crud.get_chapter(db, chapter_id)
     if not chapter:
         raise HTTPException(status_code=404, detail="章节未找到")
@@ -434,7 +471,7 @@ def create_subsection(chapter_id: int, payload: schemas.SubsectionCreate, db: Se
 
 
 @app.put("/api/subsections/{subsection_id}", response_model=schemas.SubsectionOut)
-def update_subsection(subsection_id: int, payload: schemas.SubsectionCreate, db: Session = Depends(get_db)):
+def update_subsection(subsection_id: int, payload: schemas.SubsectionCreate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     updated = crud.update_subsection(db, subsection_id, payload)
     if not updated:
         raise HTTPException(status_code=404, detail="小节未找到")
@@ -442,7 +479,7 @@ def update_subsection(subsection_id: int, payload: schemas.SubsectionCreate, db:
 
 
 @app.delete("/api/subsections/{subsection_id}")
-def delete_subsection(subsection_id: int, db: Session = Depends(get_db)):
+def delete_subsection(subsection_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     ok = crud.delete_subsection(db, subsection_id)
     if not ok:
         raise HTTPException(status_code=404, detail="小节未找到")
@@ -450,19 +487,22 @@ def delete_subsection(subsection_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/subsections/{subsection_id}/progress", response_model=schemas.SubsectionProgressOut)
-def mark_subsection_progress(subsection_id: int, payload: schemas.SubsectionProgressCreate, db: Session = Depends(get_db)):
-    prog = crud.set_subsection_progress(db, payload.user_id, subsection_id, payload.status)
+def mark_subsection_progress(subsection_id: int, payload: schemas.SubsectionProgressCreate, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    # 以 token 身份为准，忽略 payload.user_id，关闭 IDOR
+    prog = crud.set_subsection_progress(db, current_user_id, subsection_id, payload.status)
     return prog
 
 
 @app.get("/api/subsections/{subsection_id}/progress/{user_id}", response_model=schemas.SubsectionProgressOut | None)
-def get_subsection_progress(subsection_id: int, user_id: int, db: Session = Depends(get_db)):
+def get_subsection_progress(subsection_id: int, user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准，关闭 IDOR
     prog = crud.get_subsection_progress(db, user_id, subsection_id)
     return prog
 
 
 @app.post("/api/checkin/{user_id}")
-def checkin(user_id: int, db: Session = Depends(get_db)):
+def checkin(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     today = date.today().isoformat()
     existing = db.query(models.Checkin).filter(
         models.Checkin.user_id == user_id,
@@ -504,7 +544,8 @@ def get_streak(db: Session, user_id: int) -> int:
 
 
 @app.get("/api/dashboard/{user_id}")
-def get_dashboard(user_id: int, db: Session = Depends(get_db)):
+def get_dashboard(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     from datetime import date as _date, timedelta as _td
 
     user = crud.get_user(db, user_id)
@@ -567,11 +608,13 @@ def get_dashboard(user_id: int, db: Session = Depends(get_db)):
     this_week_records = db.query(models.QuizRecord).filter(
         models.QuizRecord.user_id == user_id,
         models.QuizRecord.created_at >= week_start.isoformat(),
+        models.QuizRecord.total_questions > 0,
     ).all()
     last_week_records = db.query(models.QuizRecord).filter(
         models.QuizRecord.user_id == user_id,
         models.QuizRecord.created_at >= last_week_start.isoformat(),
         models.QuizRecord.created_at < week_start.isoformat(),
+        models.QuizRecord.total_questions > 0,
     ).all()
 
     weekly_quiz_count = len(this_week_records)
@@ -641,7 +684,7 @@ def build_recent_records(db, user_id, limit=5):
     for q in quiz_list:
         ch = db.query(models.Chapter).filter(models.Chapter.id == q.chapter_id).first()
         subj = db.query(models.Subject).filter(models.Subject.id == ch.subject_id).first() if ch else None
-        pct = round(q.score / q.total_questions * 100)
+        pct = round(q.score / q.total_questions * 100) if q.total_questions else 0
         records.append({
             "type": "quiz",
             "chapter_title": ch.title if ch else f"章节#{q.chapter_id}",
@@ -658,7 +701,8 @@ def build_recent_records(db, user_id, limit=5):
 
 
 @app.get("/api/checkin/{user_id}")
-def get_checkin(user_id: int, db: Session = Depends(get_db)):
+def get_checkin(user_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准
     records = db.query(models.Checkin).filter(
         models.Checkin.user_id == user_id
     ).order_by(models.Checkin.checkin_date.desc()).limit(60).all()
@@ -713,7 +757,8 @@ def list_public_resources(subject_id: int | None = None, db: Session = Depends(g
 
 
 @app.post("/api/notes/{user_id}/share/{note_id}")
-def share_note(user_id: int, note_id: int, db: Session = Depends(get_db)):
+def share_note(user_id: int, note_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_id = current_user_id  # 以 token 身份为准，关闭 IDOR
     note = db.query(models.Note).filter(
         models.Note.id == note_id,
         models.Note.user_id == user_id,
@@ -760,7 +805,8 @@ def get_leaderboard(subject_id: int, db: Session = Depends(get_db)):
         _func.count(models.QuizRecord.id).label("attempts"),
         _func.avg(100.0 * models.QuizRecord.score / models.QuizRecord.total_questions).label("avg_pct"),
     ).filter(
-        models.QuizRecord.chapter_id.in_(chapter_ids)
+        models.QuizRecord.chapter_id.in_(chapter_ids),
+        models.QuizRecord.total_questions > 0,
     ).group_by(models.QuizRecord.user_id).order_by(_func.sum(models.QuizRecord.score).desc()).limit(20).all()
 
     leaderboard = []

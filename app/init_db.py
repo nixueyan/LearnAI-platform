@@ -49,28 +49,34 @@ subjects = [
     },
 ]
 
+# 按「学科 -> 章节 order -> 小节标题列表」组织，避免线代/概率的章节
+# 错误命中高数的小节标题（旧实现用全局序号 1-19 当 key，导致错位）。
 SECTION_DEFS = {
-    1: ["函数的概念与性质", "数列极限", "函数极限", "连续性"],
-    2: ["导数的概念", "求导法则", "高阶导数", "微分"],
-    3: ["中值定理", "洛必达法则", "函数的单调性与极值", "曲线的凹凸性"],
-    4: ["不定积分概念", "换元积分法", "分部积分法"],
-    5: ["定积分概念", "微积分基本定理", "定积分应用"],
-    6: ["多元函数概念", "偏导数", "全微分"],
-    7: ["二重积分", "三重积分"],
-    8: ["数项级数", "幂级数", "傅里叶级数"],
-    # 线性代数
-    9: ["二阶与三阶行列式", "全排列与逆序数", "n阶行列式的定义", "行列式的性质", "行列式按行展开"],
-    10: ["矩阵的概念", "矩阵的运算", "逆矩阵", "分块矩阵"],
-    11: ["矩阵的初等变换", "矩阵的秩", "线性方程组的解"],
-    12: ["向量组的线性组合", "线性相关与无关", "向量组的秩", "向量空间"],
-    13: ["特征值与特征向量", "相似矩阵", "对称矩阵的对角化", "二次型"],
-    # 概率论
-    14: ["样本空间与随机事件", "概率的定义与性质", "古典概型", "条件概率与独立性"],
-    15: ["随机变量的概念", "离散型随机变量", "分布函数", "连续型随机变量", "常见分布"],
-    16: ["二维随机变量", "边缘分布", "条件分布", "独立性"],
-    17: ["数学期望", "方差", "协方差与相关系数", "矩"],
-    18: ["大数定律", "中心极限定理"],
-    19: ["总体与样本", "统计量", "抽样分布"],
+    "高等数学": {
+        1: ["函数的概念与性质", "数列极限", "函数极限", "连续性"],
+        2: ["导数的概念", "求导法则", "高阶导数", "微分"],
+        3: ["中值定理", "洛必达法则", "函数的单调性与极值", "曲线的凹凸性"],
+        4: ["不定积分概念", "换元积分法", "分部积分法"],
+        5: ["定积分概念", "微积分基本定理", "定积分应用"],
+        6: ["多元函数概念", "偏导数", "全微分"],
+        7: ["二重积分", "三重积分"],
+        8: ["数项级数", "幂级数", "傅里叶级数"],
+    },
+    "线性代数": {
+        1: ["二阶与三阶行列式", "全排列与逆序数", "n阶行列式的定义", "行列式的性质", "行列式按行展开"],
+        2: ["矩阵的概念", "矩阵的运算", "逆矩阵", "分块矩阵"],
+        3: ["矩阵的初等变换", "矩阵的秩", "线性方程组的解"],
+        4: ["向量组的线性组合", "线性相关与无关", "向量组的秩", "向量空间"],
+        5: ["特征值与特征向量", "相似矩阵", "对称矩阵的对角化", "二次型"],
+    },
+    "概率论与数理统计": {
+        1: ["样本空间与随机事件", "概率的定义与性质", "古典概型", "条件概率与独立性"],
+        2: ["随机变量的概念", "离散型随机变量", "分布函数", "连续型随机变量", "常见分布"],
+        3: ["二维随机变量", "边缘分布", "条件分布", "独立性"],
+        4: ["数学期望", "方差", "协方差与相关系数", "矩"],
+        5: ["大数定律", "中心极限定理"],
+        6: ["总体与样本", "统计量", "抽样分布"],
+    },
 }
 
 def _sub_content(title, ch_title):
@@ -84,6 +90,10 @@ _qfile = os.path.join(os.path.dirname(__file__), "..", "questions.json")
 with open(_qfile, "r", encoding="utf-8") as _f:
     ALL_QUESTIONS = {int(k): v for k, v in _json.load(_f).items()}
 
+# 目前只有「高等数学」有真实题库（questions.json 键 1-8），
+# 其余学科保持为空（不串用高数题目，避免数据错位）。
+QUESTIONS_BY_SUBJECT = {"高等数学": ALL_QUESTIONS}
+
 # 小节内容从 subsections.json 加载
 _sfile = os.path.join(os.path.dirname(__file__), "..", "subsections.json")
 SECTION_CONTENT_MAP = {}
@@ -96,12 +106,15 @@ def init_data():
     Base.metadata.create_all(bind=engine)
     db = Session(bind=engine)
     try:
-        # 已有数据但缺少小节或题目时，补建
-        if db.query(Subsection).count() == 0 or db.query(Question).count() == 0:
+        if db.query(Subject).count() == 0:
+            # 干净初始化：先清掉可能存在的孤儿数据，再整体重建
             db.query(Subsection).delete()
             db.query(Question).delete()
+            db.query(Resource).delete()
+            db.query(Chapter).delete()
+            db.query(Subject).delete()
+            db.commit()
 
-        if db.query(Subject).count() == 0:
             for subject_data in subjects:
                 subject = Subject(
                     name=subject_data["name"],
@@ -115,15 +128,16 @@ def init_data():
                     chapter = Chapter(subject_id=subject.id, title=title, order=order, summary=summary)
                     db.add(chapter)
                     db.flush()
-                    # 小节
-                    for i, sec_title in enumerate(SECTION_DEFS.get(order, [])):
+                    # 小节：按「学科 + 章节 order」映射，避免线代/概率错位成高数标题
+                    sec_defs = SECTION_DEFS.get(subject_data["name"], {}).get(order, [])
+                    for i, sec_title in enumerate(sec_defs):
                         db.add(Subsection(chapter_id=chapter.id, title=sec_title, content=_sub_content(sec_title, title), order=i+1, is_published=True))
-                    # 题库
-                    for q_data in ALL_QUESTIONS.get(order, []):
+                    # 题库：仅当前学科有题目时使用，绝不串用其他学科
+                    for q_data in QUESTIONS_BY_SUBJECT.get(subject_data["name"], {}).get(order, []):
                         qtype, diff, qcontent, opts, ans, expl = q_data
                         db.add(Question(chapter_id=chapter.id, question_type=qtype, difficulty=diff, content=qcontent, options=opts if opts else None, answer=ans, explanation=expl if expl else None))
             db.commit()
-            # 用 subsections.json 覆盖真实 AI 内容
+            # 用 subsections.json 覆盖真实 AI 内容（按小节 id 映射，高数小节 id 1-26）
             if SECTION_CONTENT_MAP:
                 for sub in db.query(Subsection).all():
                     if sub.id in SECTION_CONTENT_MAP:

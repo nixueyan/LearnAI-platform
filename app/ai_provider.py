@@ -96,6 +96,10 @@ def call_deepseek_stream(prompt: str, user_context: dict | None = None):
         conn = http.client.HTTPSConnection(parsed.netloc, timeout=60) if parsed.scheme == "https" else http.client.HTTPConnection(parsed.netloc, timeout=60)
         conn.request("POST", parsed.path, body=body, headers={"Content-Type": "application/json", "Authorization": f"Bearer {DEEPSEEK_API_KEY}"})
         resp = conn.getresponse()
+        if resp.status != 200:
+            err_body = resp.read().decode("utf-8", errors="replace")[:300]
+            yield f"[DeepSeek 返回错误 {resp.status}：请检查 .env 中 DEEPSEEK_API_KEY 是否有效。详情：{err_body}]"
+            return
         for line in _iter_sse_lines(resp):
             if line.startswith("data: ") and not line.startswith("data: [DONE]"):
                 try:
@@ -114,12 +118,12 @@ def call_deepseek_stream(prompt: str, user_context: dict | None = None):
 
 # ===== 讯飞星火 =====
 def call_xunfei(prompt: str, user_context: dict | None = None) -> str:
-    from .config import XUNFEI_API_KEY, XUNFEI_API_URL
+    from .config import XUNFEI_API_KEY, XUNFEI_API_SECRET, XUNFEI_API_URL
     if not XUNFEI_API_KEY:
         return _stub_answer("讯飞星火", prompt)
     url = XUNFEI_API_URL or "https://spark-api-open.xf-yun.com/v1/chat/completions"
-    # HTTP 兼容接口只用 API_KEY，不拼接 API_SECRET
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {XUNFEI_API_KEY}"}
+    # HTTP 兼容接口鉴权：Authorization: Bearer API_KEY:API_SECRET
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {XUNFEI_API_KEY}:{XUNFEI_API_SECRET}"}
     payload = {
         "model": "generalv3.5",
         "messages": [
@@ -135,7 +139,7 @@ def call_xunfei(prompt: str, user_context: dict | None = None) -> str:
 
 
 def call_xunfei_stream(prompt: str, user_context: dict | None = None):
-    from .config import XUNFEI_API_KEY, XUNFEI_API_URL
+    from .config import XUNFEI_API_KEY, XUNFEI_API_SECRET, XUNFEI_API_URL
     if not XUNFEI_API_KEY:
         yield _stub_answer("讯飞星火", prompt)
         return
@@ -157,10 +161,14 @@ def call_xunfei_stream(prompt: str, user_context: dict | None = None):
         conn = http.client.HTTPSConnection(parsed.netloc, timeout=60) if parsed.scheme == "https" else http.client.HTTPConnection(parsed.netloc, timeout=60)
         conn.request("POST", parsed.path, body=body, headers={
             "Content-Type": "application/json",
-            # HTTP 兼容接口只用 API_KEY，不拼接 API_SECRET
-            "Authorization": f"Bearer {XUNFEI_API_KEY}",
+            # HTTP 兼容接口鉴权：Authorization: Bearer API_KEY:API_SECRET
+            "Authorization": f"Bearer {XUNFEI_API_KEY}:{XUNFEI_API_SECRET}",
         })
         resp = conn.getresponse()
+        if resp.status != 200:
+            err_body = resp.read().decode("utf-8", errors="replace")[:300]
+            yield f"[讯飞返回错误 {resp.status}：请检查 .env 中 XUNFEI_API_KEY 是否有效。详情：{err_body}]"
+            return
         for line in _iter_sse_lines(resp):
             if line.startswith("data: ") and not line.startswith("data: [DONE]"):
                 try:

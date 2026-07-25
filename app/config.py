@@ -18,4 +18,8 @@ XUNFEI_API_KEY = os.getenv("XUNFEI_API_KEY", "")
 XUNFEI_API_SECRET = os.getenv("XUNFEI_API_SECRET", "")
 XUNFEI_API_URL = os.getenv("XUNFEI_API_URL", "https://spark-api-open.xf-yun.com/v1/chat/completions")
 
+# 默认 AI 服务商（deepseek / xunfei）。会被前端选择覆盖；.env 可改。
 DEFAULT_AI_PROVIDER = os.getenv("DEFAULT_AI_PROVIDER", "xunfei")
+
+# 登录 token 签名密钥。生产环境务必通过环境变量设置，否则使用开发默认值（不安全）。
+SECRET_KEY = os.getenv("SECRET_KEY", "learnai-dev-secret-change-in-prod")

@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List
 import hashlib
+import secrets
 
 from sqlalchemy.orm import Session
 
@@ -8,12 +9,23 @@ from . import models, schemas
 
 
 def get_password_hash(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """加盐哈希：格式 salt$<salt>$<sha256(salt+password)>，避免彩虹表反查。"""
+    salt = secrets.token_hex(8)
+    h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return f"salt${salt}${h}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password:
         return False
+    # 新账户：加盐格式
+    if hashed_password.startswith("salt$"):
+        try:
+            _, salt, h = hashed_password.split("$", 2)
+        except ValueError:
+            return False
+        return h == hashlib.sha256((salt + plain_password).encode("utf-8")).hexdigest()
+    # 兼容历史裸 SHA256 账户（首次登录后可改为加盐：在登录成功处重新哈希即可）
     return hashed_password == hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
 
 

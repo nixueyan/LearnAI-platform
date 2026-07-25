@@ -17,6 +17,7 @@ function setCurrentUser(user) {
 
 function clearCurrentUser() {
   localStorage.removeItem("learnai_user");
+  localStorage.removeItem("learnai_token");
 }
 
 let currentUser = getCurrentUser();
@@ -155,13 +156,25 @@ window.addEventListener("DOMContentLoaded", () => {
   renderNavbar();
 });
 
-;
+
+function getToken() {
+  const u = getCurrentUser();
+  return (u && u.token) || localStorage.getItem("learnai_token") || "";
+}
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const token = getToken();
+  const headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const opts = Object.assign({}, options, { headers });
+  const response = await fetch(`${API_BASE}${path}`, opts);
+  if (response.status === 401) {
+    // token 失效，清登录态并跳登录页
+    clearCurrentUser();
+    localStorage.removeItem("learnai_token");
+    if (!location.pathname.endsWith("login.html")) location.href = "login.html";
+    throw new Error("登录已过期，请重新登录");
+  }
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || response.statusText);
@@ -389,7 +402,8 @@ async function initLoginPage() {
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
-      setCurrentUser({ id: user.id, username: user.username });
+      localStorage.setItem("learnai_token", user.token || "");
+      setCurrentUser({ id: user.id, username: user.username, token: user.token });
       window.location.href = "index.html";
     } catch (err) {
       renderMessage(err.message, "form-message");
@@ -409,7 +423,8 @@ async function initLoginPage() {
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
-      setCurrentUser({ id: user.id, username: user.username });
+      localStorage.setItem("learnai_token", user.token || "");
+      setCurrentUser({ id: user.id, username: user.username, token: user.token });
       window.location.href = "onboarding.html";
     } catch (err) {
       renderMessage(err.message, "form-message");
@@ -503,7 +518,7 @@ function toggleAIFloat() {
   }
 }
 
-function sendAIFloatMessage() {
+async function sendAIFloatMessage() {
   var input = document.getElementById('ai-float-input');
   if (!input || !input.value.trim()) return;
   var msg = input.value.trim();
@@ -513,13 +528,46 @@ function sendAIFloatMessage() {
     chat.innerHTML += '<div class="chat-message user" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:85%;word-wrap:break-word;font-size:14px;line-height:1.6;background:var(--button-primary);color:white;align-self:flex-end;">' + msg + '</div>';
     chat.scrollTop = chat.scrollHeight;
   }
-  // 模拟回复
-  setTimeout(function() {
-    if (chat) {
-      chat.innerHTML += '<div class="chat-message assistant" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:85%;word-wrap:break-word;font-size:14px;line-height:1.6;background:var(--bg-primary);border:1px solid var(--border-color);color:var(--text-primary);align-self:flex-start;">收到你的问题："' + msg + '"，我还在学习中，请稍后再试。</div>';
-      chat.scrollTop = chat.scrollHeight;
+  // 真实调用后端 /api/ai/chat/stream（流式输出）
+  var chId = (typeof currentChapterId !== 'undefined') ? currentChapterId : null;
+  var provider = document.getElementById("ai-provider")?.value || "xunfei";
+  var agentRole = document.getElementById("ai-float-role")?.value || "tutor";
+  var assistantMsg = document.createElement("div");
+  assistantMsg.className = "chat-message assistant";
+  assistantMsg.style.cssText = "margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:85%;word-wrap:break-word;font-size:14px;line-height:1.6;background:var(--bg-primary);border:1px solid var(--border-color);color:var(--text-primary);align-self:flex-start;white-space:pre-wrap;";
+  assistantMsg.textContent = "";
+  if (chat) { chat.appendChild(assistantMsg); chat.scrollTop = chat.scrollHeight; }
+  try {
+    const response = await fetch("/api/ai/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + getToken() },
+      body: JSON.stringify({ user_id: currentUserId, chapter_id: chId, provider: provider, agent_role: agentRole, prompt: msg }),
+    });
+    if (!response.ok && response.status === 401) { clearCurrentUser(); throw new Error("登录已过期"); }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    var buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      var lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line.indexOf("data: ") === 0) {
+          try {
+            var data = JSON.parse(line.slice(6));
+            if (data.token) { assistantMsg.textContent += data.token; if (chat) chat.scrollTop = chat.scrollHeight; }
+          } catch (e) {}
+        }
+      }
     }
-  }, 500);
+    if (!assistantMsg.textContent) assistantMsg.textContent = "(空响应)";
+  } catch (err) {
+    assistantMsg.textContent = "错误: " + err.message;
+    assistantMsg.style.color = "#ef4444";
+  }
 }
 
 // ===== 笔记本浮窗控制 =====

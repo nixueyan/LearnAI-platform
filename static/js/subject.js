@@ -72,7 +72,7 @@ async function generateResources() {
   try {
     const results = await request(`/chapters/${currentChapterId}/resources/generate`, {
       method: "POST",
-      body: JSON.stringify({ resource_types: types }),
+      body: JSON.stringify({ resource_types: types, provider: document.getElementById("ai-provider")?.value || "xunfei" }),
     });
     await loadChapterResources(currentChapterId, currentChapterTitle);
     renderMessage(`✅ 已生成 ${results.length} 个资源并存入公共库`, "resource-message");
@@ -470,7 +470,7 @@ async function sendAIMessage() {
   try {
     const response = await fetch("/api/ai/chat/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (typeof getToken === "function" ? getToken() : "") },
       body: JSON.stringify({ user_id: currentUserId, chapter_id: currentChapterId, provider, agent_role: agentRole, prompt }),
     });
     const reader = response.body.getReader();
@@ -539,60 +539,8 @@ async function selectChapter(chapterId, element) {
 }
 
 // ===== AI 浮窗 =====
-function toggleAIFloat() {
-  const panel = document.getElementById("ai-float");
-  if (!panel) return;
-  const isOpen = panel.style.display === "flex";
-  panel.style.display = isOpen ? "none" : "flex";
-}
-
-async function sendAIFloatMessage() {
-  const input = document.getElementById("ai-float-input");
-  const prompt = input.value.trim();
-  if (!prompt) return;
-  const chatBox = document.getElementById("ai-float-chat");
-  const provider = document.getElementById("ai-provider")?.value || "xunfei";
-  const agentRole = document.getElementById("ai-float-role")?.value || "tutor";
-  const userMsg = document.createElement("div");
-  userMsg.className = "chat-message user";
-  userMsg.textContent = prompt;
-  chatBox.appendChild(userMsg);
-  input.value = "";
-  chatBox.scrollTop = chatBox.scrollHeight;
-  const assistantMsg = document.createElement("div");
-  assistantMsg.className = "chat-message assistant";
-  assistantMsg.style.whiteSpace = "pre-wrap";
-  assistantMsg.textContent = "";
-  chatBox.appendChild(assistantMsg);
-  try {
-    const response = await fetch("/api/ai/chat/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: currentUserId, chapter_id: currentChapterId, provider, agent_role: agentRole, prompt }),
-    });
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.token) { assistantMsg.textContent += data.token; chatBox.scrollTop = chatBox.scrollHeight; }
-          } catch (e) {}
-        }
-      }
-    }
-    if (!assistantMsg.textContent) assistantMsg.textContent = "(空响应)";
-  } catch (err) {
-    assistantMsg.textContent = "错误: " + err.message;
-  }
-}
+// toggleAIFloat / sendAIFloatMessage 已在 app.js 中统一定义（真实调用 /api/ai/chat/stream），
+// 此处不再重复定义，避免“同名函数后加载覆盖”导致的实现不一致。
 
 // ===== AI 提示（修复：改用 data-hint-qid 属性查找按钮）=====
 async function aiHint(questionId) {

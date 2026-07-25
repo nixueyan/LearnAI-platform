@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, List, Optional
 
-from pydantic import BaseModel, PlainSerializer
+from pydantic import BaseModel, Field, PlainSerializer
 
 def _serialize_dt(dt: datetime) -> str:
     s = dt.isoformat()
@@ -12,7 +12,7 @@ UtcDateTime = Annotated[datetime, PlainSerializer(_serialize_dt, return_type=str
 
 class UserCreate(BaseModel):
     username: str
-    password: str
+    password: str = Field(min_length=6, description="至少 6 位")
 
 
 class UserOut(BaseModel):
@@ -21,6 +21,13 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    """登录/注册成功后的响应：包含签名 token，前端用于后续请求鉴权。"""
+    id: int
+    username: str
+    token: str
 
 
 class ProfileBase(BaseModel):
@@ -147,6 +154,7 @@ class QuizRequest(BaseModel):
 
 class ResourceGenerateRequest(BaseModel):
     resource_types: List[str]   # e.g. ["讲解文档", "思维导图"]
+    provider: str = "xunfei"   # 由前端选择，不再写死
 
 
 class QuestionOut(BaseModel):
@@ -187,7 +195,7 @@ class AIChatRequest(BaseModel):
     user_id: int
     subject_id: Optional[int] = None
     chapter_id: Optional[int] = None
-    provider: str = "deepseek"
+    provider: str = "xunfei"
     agent_role: str = "tutor"    # tutor / profile / path
     prompt: str
 

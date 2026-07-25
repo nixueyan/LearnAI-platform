@@ -1281,23 +1281,7 @@ function toggleAIFloat() {
   }
 }
 
-function sendAIFloatMessage() {
-  var input = document.getElementById('ai-float-input');
-  if (!input || !input.value.trim()) return;
-  var msg = input.value.trim();
-  input.value = '';
-  var chat = document.getElementById('ai-float-chat');
-  if (chat) {
-    chat.innerHTML += '<div class="chat-message user" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:85%;word-wrap:break-word;font-size:14px;line-height:1.6;background:var(--button-primary);color:white;align-self:flex-end;">' + msg + '</div>';
-    chat.scrollTop = chat.scrollHeight;
-  }
-  setTimeout(function() {
-    if (chat) {
-      chat.innerHTML += '<div class="chat-message assistant" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:85%;word-wrap:break-word;font-size:14px;line-height:1.6;background:var(--bg-primary);border:1px solid var(--border-color);color:var(--text-primary);align-self:flex-start;">收到你的问题："' + msg + '"，我还在学习中，请稍后再试。</div>';
-      chat.scrollTop = chat.scrollHeight;
-    }
-  }, 500);
-}
+// sendAIFloatMessage 已在 app.js 中统一定义（真实调用 /api/ai/chat/stream，不再写死假回复）
 
 // ===== 笔记本浮窗控制 =====
 function toggleNotebook() {
