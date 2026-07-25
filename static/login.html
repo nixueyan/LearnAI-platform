@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LearnAI 登录注册</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .auth-wrapper {
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh; padding: 24px;
+    }
+    .auth-card {
+      background: var(--bg-primary); border-radius: 16px;
+      box-shadow: var(--card-shadow); padding: 32px 36px;
+      width: 100%; max-width: 400px;
+    }
+    .auth-card h2 { margin: 0 0 20px; text-align: center; font-size: 22px; color: var(--text-primary); }
+    .auth-card label { font-size: 13px; color: var(--text-secondary); }
+    .auth-card input { margin-bottom: 12px; }
+    .auth-card button { width: 100%; margin-top: 8px; }
+    .pw-hint { font-size: 12px; color: var(--text-secondary); margin: -8px 0 12px; }
+  </style>
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-card">
+      <h2>📚 LearnAI</h2>
+      <div class="tabs">
+        <div id="tab-login" class="tab active">登录</div>
+        <div id="tab-register" class="tab">注册</div>
+      </div>
+      <div id="form-message" class="card hidden" style="background:#fff3cd;color:#664d03;"></div>
+      <form id="login-form">
+        <label>用户名</label>
+        <input id="login-username" type="text" placeholder="请输入用户名" required />
+        <label>密码</label>
+        <input id="login-password" type="password" placeholder="请输入密码" minlength="6" required />
+        <button type="submit">登录</button>
+      </form>
+      <form id="register-form" class="hidden">
+        <label>用户名</label>
+        <input id="register-username" type="text" placeholder="请输入用户名" required />
+        <label>密码</label>
+        <input id="register-password" type="password" placeholder="至少6位，建议字母+数字" minlength="6" required />
+        <p class="pw-hint">* 密码至少 6 位，建议包含字母和数字</p>
+        <button type="submit">注册并开始</button>
+      </form>
+    </div>
+  </div>
+  <script src="js/app.js"></script>
+  <script>initLoginPage();</script>
+</body>
+</html>

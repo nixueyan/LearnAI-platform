@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>个人画像 - LearnAI</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .profile-header {
+      background: linear-gradient(135deg, #8fbea2 0%, #b5d5c2 100%);
+      color: white;
+      padding: 40px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      text-align: center;
+      position: relative;
+    }
+    .profile-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      margin: 0 auto 16px;
+    }
+    .profile-name {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: var(--card-shadow);
+    }
+    .stat-number {
+      font-size: 32px;
+      font-weight: bold;
+      color: var(--button-primary);
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    .info-section {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--card-shadow);
+    }
+    .info-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .info-item {
+      padding: 12px;
+      background: var(--info-bg);
+      border-radius: 8px;
+      border-left: 4px solid var(--button-primary);
+    }
+    .info-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .info-value {
+      font-size: 16px;
+      font-weight: bold;
+      color: var(--text-primary);
+    }
+    .radar-container {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      box-shadow: var(--card-shadow);
+    }
+    canvas {
+      width: 100%;
+      max-width: 450px;
+      height: auto;
+      aspect-ratio: 1/1;
+    }
+    .edit-btn {
+      background: var(--button-primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="profile-header">
+      <a href="index.html" style="
+  position:absolute; top:16px; right:16px;
+  display:inline-flex; align-items:center; gap:8px;
+  color:white; text-decoration:none; font-size:15px; font-weight:600;
+  background:rgba(255,255,255,0.25);
+  padding:10px 20px; border-radius:10px;
+  border:2px solid rgba(255,255,255,0.4);
+" onmouseover="this.style.background='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.25)'">
+  🏠 返回首页
+</a>
+      <div class="profile-avatar">👤</div>
+      <div class="profile-name" id="profile-name">加载中...</div>
+      <div id="profile-grade"></div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number" id="stat-courses">3</div>
+        <div class="stat-label">在学课程</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-hours">18</div>
+        <div class="stat-label">学习小时</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-notes">24</div>
+        <div class="stat-label">笔记数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-quizzes">15</div>
+        <div class="stat-label">练习次数</div>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <h2>基本信息</h2>
+      <div class="info-row">
+        <div class="info-item">
+          <div class="info-label">姓名</div>
+          <div class="info-value" id="info-name">未设置</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">年级</div>
+          <div class="info-value" id="info-grade">未设置</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">专业</div>
+          <div class="info-value" id="info-major">未设置</div>
+        </div>
+      </div>
+      <div class="info-row">
+        <div class="info-item">
+          <div class="info-label">学习目标</div>
+          <div class="info-value" id="info-goal">未设置</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">兴趣方向</div>
+          <div class="info-value" id="info-interests">未设置</div>
+        </div>
+      </div>
+      <button class="edit-btn">编辑信息</button>
+    </div>
+
+    <div class="info-section">
+      <h2>能力评估 - 六维雷达图</h2>
+      <div class="radar-container">
+        <canvas id="radar-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <h2>学习路径</h2>
+      <div id="learning-path" style="position:relative; padding:16px 0;"></div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    
+    async function saveProfile() {
+      const modal = document.getElementById("profile-edit-modal");
+      const data = {
+        name: document.getElementById("edit-name").value.trim() || null,
+        grade: document.getElementById("edit-grade").value.trim() || null,
+        major: document.getElementById("edit-major").value.trim() || null,
+        goal: document.getElementById("edit-goal").value.trim() || null,
+        interests: document.getElementById("edit-interests").value.trim() || null,
+      };
+      try {
+        await request(`/profiles/${currentUserId}`, {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+        document.getElementById("profile-name").textContent = data.name || currentUsername;
+        document.getElementById("profile-grade").textContent = (data.grade || "") + (data.major ? " · " + data.major : "");
+        document.getElementById("info-name").textContent = data.name || "未设置";
+        document.getElementById("info-grade").textContent = data.grade || "未设置";
+        document.getElementById("info-major").textContent = data.major || "未设置";
+        document.getElementById("info-goal").textContent = data.goal || "未设置";
+        document.getElementById("info-interests").textContent = data.interests || "未设置";
+        if (modal) modal.remove();
+        const user = getCurrentUser();
+        if (user && data.name) {
+          user.name = data.name;
+          setCurrentUser(user);
+        }
+        const navName = document.querySelector(".nav-dropdown-name");
+        if (navName && data.name) navName.textContent = data.name;
+        const navAvatar = document.getElementById("nav-avatar");
+        if (navAvatar && data.name) navAvatar.title = data.name;
+      } catch (err) {
+        alert("保存失败：" + (err.message || "未知错误"));
+      }
+    }
+
+    // ===== 雷达图绘制函数 =====
+    function drawRadarChart(scores) {
+  const canvas = document.getElementById("radar-chart");
+  if (!canvas) {
+    console.log("❌ canvas 未找到");
+    return;
+  }
+  
+  if (!scores || scores.length !== 6) {
+    scores = [50, 50, 50, 50, 50, 50];
+  }
+  
+  scores = scores.map(function(s) {
+    return Math.min(100, Math.max(0, Math.round(s)));
+  });
+  
+  console.log('📊 绘制雷达图:', scores);
+  
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.min(rect.width, rect.height, 450);
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const centerX = size / 2;
+  const centerY = size / 2;
+  const radius = size / 2 - 55;
+  const levels = 5;
+  const skills = ["逻辑思维", "问题解决", "创新能力", "执行力", "学习能力", "团队合作"];
+  
+  ctx.clearRect(0, 0, size, size);
+
+  // 网格
+  ctx.strokeStyle = "rgba(140, 180, 155, 0.2)";
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= levels; i++) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, (radius/levels)*i, 0, 2*Math.PI);
+    ctx.stroke();
+  }
+  
+  // 轴线
+  for (let i = 0; i < skills.length; i++) {
+    const angle = (i * 2 * Math.PI) / skills.length - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle));
+    ctx.strokeStyle = "rgba(140, 180, 155, 0.2)";
+    ctx.stroke();
+  }
+
+  // 数据多边形
+  ctx.fillStyle = "rgba(140, 180, 155, 0.25)";
+  ctx.strokeStyle = "#8fbea2";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let i = 0; i < skills.length; i++) {
+    const angle = (i * 2 * Math.PI) / skills.length - Math.PI / 2;
+    const r = (radius / 100) * (scores[i] || 50);
+    const x = centerX + r * Math.cos(angle);
+    const y = centerY + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(x, y); 
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // 数据点
+  for (let i = 0; i < skills.length; i++) {
+    const angle = (i * 2 * Math.PI) / skills.length - Math.PI / 2;
+    const r = (radius / 100) * (scores[i] || 50);
+    const x = centerX + r * Math.cos(angle);
+    const y = centerY + r * Math.sin(angle);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = "#4CAF82";
+    ctx.fill();
+  }
+
+  // 标签
+  const fontFamily = "'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
+  
+  for (let i = 0; i < skills.length; i++) {
+    const angle = (i * 2 * Math.PI) / skills.length - Math.PI / 2;
+    const x = centerX + (radius + 30) * Math.cos(angle);  // 标签离中心稍近一点
+    const y = centerY + (radius + 30) * Math.sin(angle);
+    ctx.fillStyle = "#333";
+    ctx.font = "12px " + fontFamily;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(skills[i], x, y);
+    
+    const r_val = (radius / 100) * (scores[i] || 50);
+    const sx = centerX + r_val * 0.72 * Math.cos(angle);
+    const sy = centerY + r_val * 0.72 * Math.sin(angle);
+    ctx.fillStyle = "#4CAF82";
+    ctx.font = "bold 13px " + fontFamily;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(scores[i], sx, sy);
+  }
+}
+    // ===== 主初始化函数 =====
+    async function initProfilePage() {
+      // 加载基本信息
+      let profileName = currentUsername;
+      try {
+        const profile = await request(`/profiles/${currentUserId}`);
+        if (profile) {
+          profileName = profile.name || currentUsername;
+          document.getElementById("profile-name").textContent = profileName;
+          document.getElementById("profile-grade").textContent = (profile.grade || "") + (profile.major ? " · " + profile.major : "");
+          document.getElementById("info-name").textContent = profile.name || "未设置";
+          document.getElementById("info-grade").textContent = profile.grade || "未设置";
+          document.getElementById("info-major").textContent = profile.major || "未设置";
+          document.getElementById("info-goal").textContent = profile.goal || "未设置";
+          document.getElementById("info-interests").textContent = profile.interests || "未设置";
+        }
+      } catch (e) {
+        console.log("Profile load failed, using defaults");
+        document.getElementById("profile-name").textContent = currentUsername;
+      }
+
+      // 加载学习统计数据
+      try {
+        const [quizHistory, checkinData, notes] = await Promise.all([
+          request(`/quiz/history/${currentUserId}`).catch(() => []),
+          request(`/checkin/${currentUserId}`).catch(() => ({streak:0, total_days:0})),
+          request(`/notes/${currentUserId}`).catch(() => []),
+        ]);
+
+        document.getElementById("stat-courses").textContent = "1";
+        document.getElementById("stat-hours").textContent = Math.max(1, Math.round(checkinData.total_days * 1.5));
+        document.getElementById("stat-notes").textContent = notes.length;
+        document.getElementById("stat-quizzes").textContent = quizHistory.length;
+
+        // ===== 根据答题情况计算六维数据 =====
+        let quizScores = [50, 50, 50, 50, 50, 50];
+
+        if (quizHistory.length > 0) {
+          var totalScore = 0;
+          var totalQuestions = 0;
+          quizHistory.forEach(function(q) {
+            totalScore += q.score || 0;
+            totalQuestions += q.total_questions || 0;
+          });
+          var overallAvg = totalQuestions > 0 ? (totalScore / totalQuestions) * 100 : 50;
+          var displayBase = 60 + (overallAvg / 100) * 35;
+          var weights = [0.92, 0.87, 0.82, 0.96, 0.89, 0.78];
+          quizScores = weights.map(function(w) {
+            return Math.min(98, Math.round(displayBase * w));
+          });
+        } else {
+          console.log('📊 暂无答题数据，使用默认值');
+        }
+        drawRadarChart(quizScores);
+
+    } catch (e) {
+      console.log("Stats load failed", e);
+      drawRadarChart([50, 50, 50, 50, 50, 50]);
+    }
+      // 编辑按钮
+      const editBtn = document.querySelector(".edit-btn");
+      if (editBtn) {
+        editBtn.addEventListener("click", function() {
+          const old = document.getElementById("profile-edit-modal");
+          if (old) old.remove();
+
+          const modal = document.createElement("div");
+          modal.id = "profile-edit-modal";
+          modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+          modal.innerHTML = `
+            <div style="background:var(--bg-primary);border-radius:16px;padding:28px;width:90%;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <h3 style="margin:0;">编辑个人信息</h3>
+                <button onclick="document.getElementById('profile-edit-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">×</button>
+              </div>
+              <label style="font-size:13px;color:var(--text-secondary);">姓名</label>
+              <input id="edit-name" type="text" value="${document.getElementById('info-name').textContent !== '未设置' ? document.getElementById('info-name').textContent : ''}" placeholder="请输入姓名" style="width:100%;margin-bottom:12px;"/>
+              <label style="font-size:13px;color:var(--text-secondary);">年级</label>
+              <input id="edit-grade" type="text" value="${document.getElementById('info-grade').textContent !== '未设置' ? document.getElementById('info-grade').textContent : ''}" placeholder="例如：大一" style="width:100%;margin-bottom:12px;"/>
+              <label style="font-size:13px;color:var(--text-secondary);">专业</label>
+              <input id="edit-major" type="text" value="${document.getElementById('info-major').textContent !== '未设置' ? document.getElementById('info-major').textContent : ''}" placeholder="请输入专业" style="width:100%;margin-bottom:12px;"/>
+              <label style="font-size:13px;color:var(--text-secondary);">学习目标</label>
+              <input id="edit-goal" type="text" value="${document.getElementById('info-goal').textContent !== '未设置' ? document.getElementById('info-goal').textContent : ''}" placeholder="请输入学习目标" style="width:100%;margin-bottom:12px;"/>
+              <label style="font-size:13px;color:var(--text-secondary);">兴趣方向</label>
+              <input id="edit-interests" type="text" value="${document.getElementById('info-interests').textContent !== '未设置' ? document.getElementById('info-interests').textContent : ''}" placeholder="例如：理工、经管" style="width:100%;margin-bottom:20px;"/>
+              <div style="display:flex;justify-content:flex-end;gap:8px;">
+                <button onclick="document.getElementById('profile-edit-modal').remove()" style="padding:10px 20px;background:var(--text-secondary);color:white;border:none;border-radius:6px;cursor:pointer;">取消</button>
+                <button onclick="saveProfile()" style="padding:10px 20px;background:var(--button-primary);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">保存</button>
+              </div>
+            </div>
+          `;
+          modal.addEventListener("click", function(e) { if (e.target === modal) modal.remove(); });
+          document.body.appendChild(modal);
+        });
+      }
+
+      loadProgress();
+    }
+
+    // ===== 加载学习路径 =====
+    async function loadProgress() {
+      const container = document.getElementById("learning-path");
+      try {
+        const [progress, chapters] = await Promise.all([
+          request(`/progress/${currentUserId}`).catch(() => []),
+          request("/subjects/1/chapters").catch(() => []),
+        ]);
+
+        const statusMap = {};
+        progress.forEach(function(p) { statusMap[p.chapter_id] = p.status; });
+
+        if (chapters.length === 0) {
+          container.innerHTML = "<p style='color:var(--text-secondary);'>暂无学习数据</p>";
+          return;
+        }
+
+        const colors = { "已完成": "#8fbea2", "学习中": "#b5d5c2", "未开始": "#e0e0e0" };
+        const icons = { "已完成": "✅", "学习中": "📖", "未开始": "⭕" };
+        const lineColors = { "已完成": "#8fbea2", "学习中": "#b5d5c2", "未开始": "#e8e8e8" };
+
+        var html = "";
+        for (var i = 0; i < chapters.length; i++) {
+          var ch = chapters[i];
+          var status = statusMap[ch.id] || "未开始";
+          var color = colors[status];
+          var icon = icons[status];
+
+          html += '<div style="display:flex; align-items:flex-start; gap:16px; position:relative;">';
+          html += '<div style="display:flex; flex-direction:column; align-items:center; width:40px; flex-shrink:0;">';
+          html += '<div style="width:36px; height:36px; border-radius:50%; background:' + color + '; display:flex; align-items:center; justify-content:center; font-size:16px; z-index:1;">' + icon + '</div>';
+          if (i < chapters.length - 1) {
+            var nextStatus = statusMap[chapters[i+1].id] || "未开始";
+            html += '<div style="width:2px; flex:1; min-height:24px; background:' + lineColors[nextStatus] + '; margin:4px 0;"></div>';
+          }
+          html += '</div>';
+          html += '<div style="flex:1; padding-bottom:20px;">';
+          html += '<div style="font-weight:bold; font-size:15px; color:var(--text-primary);">' + ch.title + '</div>';
+          html += '<div style="font-size:12px; color:' + color + '; margin-top:2px;">' + status + '</div>';
+          html += '<div style="margin-top:4px; font-size:13px; color:var(--text-secondary);">' + (ch.summary || "") + '</div>';
+          html += '<a href="subject.html?id=1&chapter=' + ch.id + '" style="font-size:12px; color:var(--button-primary); text-decoration:none;">继续学习 →</a>';
+          html += '</div></div>';
+        }
+        container.innerHTML = html;
+      } catch(e) {
+        container.innerHTML = "<p style='color:var(--text-secondary);'>加载失败</p>";
+      }
+    }
+
+    // ===== 启动 =====
+    initProfilePage();
+  </script>
+</body>
+</html>

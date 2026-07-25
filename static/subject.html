@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>课程详情 - LearnAI</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .subject-header {
+      background: linear-gradient(135deg, #8fbea2 0%, #b5d5c2 100%);
+      color: white;
+      padding: 32px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+    .subject-title {
+      font-size: 28px;
+      margin: 0 0 8px 0;
+    }
+    .subject-meta {
+      font-size: 14px;
+      opacity: 0.9;
+      margin: 0;
+    }
+    .subject-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 24px;
+    }
+    .sidebar {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: var(--card-shadow);
+      height: fit-content;
+      position: sticky;
+      top: 76px;
+    }
+    .sidebar h3 {
+      margin: 0 0 14px 0;
+      color: var(--text-primary);
+      font-size: 15px;
+    }
+    .chapter-list {
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .chapter-item {
+      padding: 10px 12px;
+      margin: 6px 0;
+      background: var(--info-bg);
+      color: var(--text-primary);
+      border-radius: 8px;
+      cursor: pointer;
+      border-left: 4px solid transparent;
+      transition: all 0.2s;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .chapter-item:hover {
+      border-left-color: var(--button-primary);
+      transform: translateX(4px);
+    }
+    .chapter-item.active {
+      background: var(--button-primary);
+      color: white;
+      border-left-color: var(--button-primary);
+      font-weight: bold;
+    }
+    .content {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: var(--card-shadow);
+      min-height: 500px;
+    }
+    .content h2 {
+      margin-top: 0;
+      color: var(--text-primary);
+    }
+    .tab-container {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--border-color);
+    }
+    .tab-button {
+      padding: 12px 18px;
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+      font-size: 14px;
+    }
+    .tab-button:hover {
+      color: var(--button-primary);
+    }
+    .tab-button.active {
+      color: var(--button-primary);
+      border-bottom-color: var(--button-primary);
+    }
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+    .resource-item {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      border-left: 4px solid var(--button-primary);
+      transition: all 0.2s;
+    }
+    .resource-item:hover {
+      box-shadow: var(--card-shadow);
+    }
+    .resource-title {
+      font-weight: bold;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+    .resource-desc {
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.8;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .btn {
+      padding: 10px 20px;
+      background: var(--button-primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: var(--button-hover);
+      transform: translateY(-2px);
+    }
+    .btn-secondary {
+      background: var(--accent-color);
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .quiz-item {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      border-left: 4px solid var(--button-primary);
+    }
+    .quiz-question {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .quiz-option {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+    }
+    .quiz-option input {
+      width: auto;
+      margin-right: 10px;
+    }
+    .quiz-chip {
+      display: inline-block; padding: 8px 16px; margin: 4px;
+      border-radius: 20px; background: var(--info-bg); cursor: pointer;
+      font-size: 13px; color: var(--text-secondary); transition: all .2s;
+      border: 2px solid transparent; user-select: none;
+    }
+    .quiz-chip:has(input:checked) {
+      background: var(--button-primary); color: white; font-weight: bold;
+    }
+    .quiz-chip input { display: none; }
+    .note-item {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      border-left: 4px solid var(--accent-color);
+    }
+    .note-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .note-title {
+      font-weight: bold;
+      color: var(--text-primary);
+    }
+    .note-time {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .note-content {
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .note-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .note-actions button {
+      padding: 4px 12px;
+      font-size: 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: var(--button-primary);
+      color: white;
+    }
+    .chat-box {
+      background: var(--info-bg);
+      border-radius: 10px;
+      padding: 16px;
+      height: 400px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-message {
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      max-width: 85%;
+      word-wrap: break-word;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .chat-message.user {
+      background: var(--button-primary);
+      color: white;
+      align-self: flex-end;
+    }
+    .chat-message.assistant {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      align-self: flex-start;
+    }
+    .chat-input-group {
+      display: flex;
+      gap: 8px;
+    }
+    .chat-input-group input {
+      flex: 1;
+    }
+    .chat-input-group button {
+      padding: 10px 20px;
+    }
+    @media (max-width: 900px) {
+      .subject-layout {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="subject-header">
+  <a href="index.html" style="
+  display:inline-flex; align-items:center; gap:8px;
+  color:white; text-decoration:none; font-size:15px; font-weight:600;
+  margin-bottom:16px; background:rgba(255,255,255,0.25);
+  padding:10px 20px; border-radius:10px;
+  border:2px solid rgba(255,255,255,0.4);
+  transition:all 0.2s;
+  backdrop-filter:blur(4px);
+  float:right;
+" onmouseover="this.style.background='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.25)'">
+  🏠 返回首页
+</a>
+  <h1 class="subject-title" id="subject-name">课程详情</h1>
+  <p class="subject-meta" id="subject-meta">加载中...</p>
+</div>
+
+    <div class="subject-layout">
+      <!-- 左侧边栏 -->
+      <div class="sidebar">
+        <h3>📚 章节目录</h3>
+        <div class="chapter-list" id="chapter-list"></div>
+      </div>
+
+      <!-- 右侧内容 -->
+      <div class="content">
+        <!-- 标签页 -->
+        <div class="tab-container">
+          <button class="tab-button active" onclick="switchTab('resources')">📖 学习资源</button>
+          <button class="tab-button" onclick="switchTab('mindmap')">🧠 思维导图</button>
+          <button class="tab-button" onclick="switchTab('quiz')">✏️ 题库练习</button>
+          <button class="tab-button" onclick="switchTab('notes')">📝 我的笔记</button>
+          <button class="tab-button" onclick="switchTab('ppt')">📊 PPT</button>
+        </div>
+
+        <!-- Tab 1: 学习资源 -->
+        <div class="tab-pane active" id="tab-resources">
+          <div>
+            <!-- 已有资源展示区 -->
+            <div id="resource-output"></div>
+            <!-- 无资源时显示：资源生成面板 -->
+            <div id="resource-generate-panel" style="display:none;">
+                <div style="background:var(--info-bg); border-radius:10px; padding:20px; text-align:center;">
+                  <p style="color:var(--info-text); margin:0 0 16px;">📭 该章节暂无公共资源，让 AI 帮你生成</p>
+                  <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;">
+                    <label style="cursor:pointer; padding:8px 16px; background:var(--bg-primary); border-radius:8px; border:2px solid var(--border-color);">
+                      <input type="checkbox" name="res-type" value="讲解文档" checked /> 📄 讲解文档
+                    </label>
+                    <label style="cursor:pointer; padding:8px 16px; background:var(--bg-primary); border-radius:8px; border:2px solid var(--border-color);">
+                      <input type="checkbox" name="res-type" value="思维导图" /> 🧠 思维导图
+                    </label>
+                    <label style="cursor:pointer; padding:8px 16px; background:var(--bg-primary); border-radius:8px; border:2px solid var(--border-color);">
+                      <input type="checkbox" name="res-type" value="视频" /> 🎬 视频脚本
+                    </label>
+                  </div>
+                  <button class="btn" id="btn-generate-resource" onclick="generateResources()">🤖 AI 生成资源</button>
+                  <span id="resource-loading" style="display:none; margin-left:12px; color:var(--text-secondary);">⏳ 生成中，请稍候...</span>
+                </div>
+              </div>
+              <div id="resource-message" style="padding: 12px; background: var(--info-bg); border-radius: 8px; display: none; margin-top:12px;"></div>
+          </div>
+        </div>
+
+        <!-- Tab 2: 思维导图 -->
+        <div class="tab-pane" id="tab-mindmap">
+          <div style="display:flex;gap:16px">
+            <div style="flex:1">
+              <div id="mindmap-content" style="background:#f5f0e8;border-radius:12px;padding:24px;border:2px solid #f0c060;line-height:1.8;font-size:14px;white-space:pre-wrap">
+                <p class="muted" style="text-align:center">加载思维导图...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: 题库练习 -->
+        <div class="tab-pane" id="tab-quiz">
+          <div id="quiz-setup">
+            <div class="form-group">
+              <label>题型选择（可多选）</label>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                <label class="quiz-chip"><input type="checkbox" name="quiz-type" value="选择题" checked /> 选择题</label>
+                <label class="quiz-chip"><input type="checkbox" name="quiz-type" value="填空题" /> 填空题</label>
+                <label class="quiz-chip"><input type="checkbox" name="quiz-type" value="计算题" /> 计算题</label>
+                <label class="quiz-chip"><input type="checkbox" name="quiz-type" value="证明题" /> 证明题</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>难度</label>
+              <select id="quiz-difficulty">
+                <option value="">不限</option>
+                <option value="简单">简单</option>
+                <option value="中等" selected>中等</option>
+                <option value="困难">困难</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>题目数量</label>
+              <select id="quiz-count">
+                <option value="5">5题</option>
+                <option value="10" selected>10题</option>
+                <option value="20">20题</option>
+              </select>
+            </div>
+            <button class="btn" onclick="startWeakQuiz()" style="background:#e8a838;margin-right:8px">🎯 弱项强化</button>
+            <button class="btn" onclick="startQuiz()">开始练习</button>
+          </div>
+          <div id="quiz-message" style="padding: 12px; background: var(--info-bg); border-radius: 8px; display: none; margin-top: 16px;"></div>
+          <div id="quiz-content" style="display: none; margin-top: 20px; max-height: 65vh; overflow-y: auto;">
+            <div id="quiz-output"></div>
+          </div>
+          <div id="quiz-history" style="margin-top: 24px;"></div>
+          <div id="wrong-questions-list" style="margin-top: 16px;"></div>
+        </div>
+
+        <!-- Tab 3: 我的笔记 -->
+        <div class="tab-pane" id="tab-notes">
+          <div class="form-group">
+            <label>新建笔记</label>
+            <textarea id="note-content" placeholder="输入笔记内容..." style="height: 100px;"></textarea>
+          </div>
+          <button class="btn" onclick="addNote()">保存笔记</button>
+          <div id="notes-output" style="margin-top: 20px;"></div>
+        </div>
+
+        <!-- Tab 4: PPT -->
+        <div class="tab-pane" id="tab-ppt">
+          <p class="muted" style="font-size:13px;margin:0 0 12px;color:#888;">📊 公共资源 · 以下 PPT 为团队共享，所有成员看到的内容一致（测试阶段）。</p>
+          <div id="ppt-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 助手浮窗 -->
+  <div class="ai-float" id="ai-float" style="display:none;">
+    <div class="ai-float-header">
+      <span>🤖 AI 助手</span>
+      <div>
+        <select id="ai-float-role" style="width:auto; margin:0; padding:4px 8px; font-size:12px; background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px;">
+          <option value="tutor">答疑</option>
+          <option value="profile">画像</option>
+          <option value="path">路径</option>
+        </select>
+        <button onclick="toggleAIFloat()" style="background:none;border:none;color:var(--text-primary);font-size:20px;cursor:pointer;padding:0 0 0 8px;">✕</button>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:12px; min-height:200px; max-height:350px;" id="ai-float-chat"></div>
+    <div style="display:flex; gap:8px; padding:12px; border-top:1px solid var(--border-color);">
+      <input type="text" id="ai-float-input" placeholder="输入问题..." onkeydown="if(event.key==='Enter')sendAIFloatMessage()" style="flex:1; margin:0;" />
+      <button class="btn" onclick="sendAIFloatMessage()" style="padding:8px 16px; font-size:13px;">发送</button>
+    </div>
+  </div>
+  <button class="ai-fab" onclick="toggleAIFloat()" title="AI助手">🤖</button>
+
+  <!-- 全局笔记本浮窗 -->
+  <div class="notebook-float" id="notebook-float" style="display:none;">
+    <div class="notebook-float-header">
+      <span>📝 全部笔记</span>
+      <button onclick="toggleNotebook()" style="background:none;border:none;color:var(--text-primary);font-size:20px;cursor:pointer;padding:0;">✕</button>
+    </div>
+    <div style="padding:0 20px 12px; display:flex; gap:8px;">
+        <input type="text" id="notebook-search" placeholder="搜索笔记..." oninput="searchNotebook()" style="flex:1; margin:0;" />
+        <button class="btn" onclick="createNoteFromFloat()" style="padding:6px 12px; font-size:12px; white-space:nowrap;">+ 新建</button>
+      </div>
+    <div class="notebook-float-body" id="notebook-float-body"></div>
+  </div>
+  <button class="notebook-fab" onclick="toggleNotebook()" title="全部笔记">📝</button>
+
+  <!-- Markdown and KaTeX for subsection rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/contrib/auto-render.min.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/subject.js"></script>
+  <script>initSubjectPage();</script>
+</body>
+</html>
+

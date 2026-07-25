@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+venv/
+check_db.py
+test_app.py
+.env
+*.db
+.workbuddy/
+_dbcount.txt
+_test_flip.js
+
+# 运行日志
+.uvicorn.log
+
+# 旧备份（不应进仓库）
+index.html.bak
+static/index.html.bak
